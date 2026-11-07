@@ -1,0 +1,13 @@
+{
+  "name": "iot-demo",
+  "version": "1.0.0",
+
+  "scripts": {
+    "pub": "node publisher.js",
+    "sub": "node subscriber.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "mqtt": "^5.0.0"
+  }
+}
