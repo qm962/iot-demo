@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IoT 数据可视化 · 温度 / 湿度</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 24px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    h1 { font-size: 20px; margin: 0; font-weight: 600; }
+    .topic { font-size: 13px; color: #94a3b8; }
+    #status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #1e293b;
+      color: #94a3b8;
+    }
+    #status .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #64748b; transition: background .3s;
+    }
+    #status.on .dot { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+    #status.on { color: #bbf7d0; }
+    #status.off .dot { background: #ef4444; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .card .label { font-size: 12px; color: #94a3b8; margin-bottom: 8px; }
+    .card .value { font-size: 26px; font-weight: 700; letter-spacing: .5px; }
+    .card .value.temp { color: #f87171; }
+    .card .value.humi { color: #38bdf8; }
+    .card .value.small { font-size: 16px; font-weight: 500; }
+    .chart-wrap {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 18px;
+      height: 460px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>IoT 实时数据可视化</h1>
+      <div class="topic">Topic：<span id="topic">-</span></div>
+    </div>
+    <div id="status" class="off"><span class="dot"></span><span id="statusText">连接中…</span></div>
+  </header>
+
+  <section class="cards">
+    <div class="card">
+      <div class="label">当前温度 (°C)</div>
+      <div class="value temp" id="curTemp">--</div>
+    </div>
+    <div class="card">
+      <div class="label">当前湿度 (%)</div>
+      <div class="value humi" id="curHumi">--</div>
+    </div>
+    <div class="card">
+      <div class="label">最近更新时间</div>
+      <div class="value small" id="curTime">--</div>
+    </div>
+    <div class="card">
+      <div class="label">已接收数据点</div>
+      <div class="value small" id="curCount">0</div>
+    </div>
+  </section>
+
+  <div class="chart-wrap">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <script>
+    const MAX_POINTS = 100;
+    const labels = [];
+    const tempData = [];
+    const humiData = [];
+
+    const statusEl = document.getElementById('status');
+    const statusText = document.getElementById('statusText');
+
+    const chart = new Chart(document.getElementById('chart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: '温度 (°C)',
+            data: tempData,
+            borderColor: '#f87171',
+            backgroundColor: 'rgba(248,113,113,0.15)',
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2,
+            fill: true,
+          },
+          {
+            label: '湿度 (%)',
+            data: humiData,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56,189,248,0.15)',
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2,
+            fill: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+            grid: { color: 'rgba(148,163,184,0.1)' },
+          },
+          y: {
+            ticks: { color: '#94a3b8' },
+            grid: { color: 'rgba(148,163,184,0.1)' },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: '#e2e8f0' } },
+        },
+      },
+    });
+
+    function fmtTime(ts) {
+      const d = new Date(ts);
+      const p = (n) => String(n).padStart(2, '0');
+      return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    }
+
+    function addPoint(p) {
+      labels.push(fmtTime(p.ts));
+      tempData.push(Number(p.temperature));
+      humiData.push(Number(p.humidity));
+      if (labels.length > MAX_POINTS) {
+        labels.shift();
+        tempData.shift();
+        humiData.shift();
+      }
+      chart.update('none');
+
+      document.getElementById('curTemp').textContent = p.temperature;
+      document.getElementById('curHumi').textContent = p.humidity;
+      document.getElementById('curTime').textContent = new Date(p.ts).toLocaleTimeString('zh-CN');
+      document.getElementById('curCount').textContent = labels.length;
+    }
+
+    function setStatus(on, text) {
+      statusEl.classList.toggle('on', on);
+      statusEl.classList.toggle('off', !on);
+      statusText.textContent = text;
+    }
+
+    // 首屏回填历史数据
+    fetch('/api/history')
+      .then((r) => r.json())
+      .then((d) => {
+        document.getElementById('topic').textContent = d.topic;
+        (d.points || []).forEach(addPoint);
+      })
+      .catch(() => {});
+
+    // SSE 实时推送
+    const es = new EventSource('/api/stream');
+    es.onopen = () => setStatus(true, '已连接');
+    es.onerror = () => setStatus(false, '连接断开，重连中…');
+    es.onmessage = (e) => {
+      setStatus(true, '已连接');
+      try { addPoint(JSON.parse(e.data)); } catch (err) {}
+    };
+  </script>
+</body>
+</html>
